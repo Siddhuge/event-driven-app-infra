@@ -1,0 +1,296 @@
+# ============================================================================
+# TERRAFORM - Local State & Configuration
+# ============================================================================
+
+# Local .terraform directories
+**/.terraform/
+**/.terraform.lock.hcl
+
+# State files (CRITICAL - never commit!)
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+terraform.tfstate
+
+# Variable files (contain sensitive data)
+*.tfvars
+*.tfvars.json
+*.auto.tfvars
+!*.tfvars.example
+
+# Terraform plan files
+*.tfplan
+*.tfplan.*
+plan.out
+tfplan
+
+# Terraform CLI config files
+.terraformrc
+terraform.rc
+
+# Terraform crash logs
+crash.log
+crash.*.log
+
+# ============================================================================
+# TERRAFORM - Override & Development Files
+# ============================================================================
+
+# Override files (local development overrides)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Cache directory
+.terraform/
+
+# ============================================================================
+# CLOUD PROVIDER CREDENTIALS (CRITICAL)
+# ============================================================================
+
+# AWS
+.aws/
+.aws/credentials
+.aws/config
+aws_credentials
+
+# Azure
+.azure/
+.azurerc
+azure_config
+azure_credentials
+
+# Google Cloud
+.gcloud/
+.gcp/
+google_credentials.json
+service-account-key.json
+
+# Generic secrets (never commit)
+*secret*
+*credential*
+*auth*
+*.key
+*.pem
+*.pub
+*.private
+
+# ============================================================================
+# IDE & EDITOR
+# ============================================================================
+
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.vscode/workspace.json
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Vim
+*.swp
+*.swo
+*~
+.vim/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# Nano
+*~
+
+# Visual Studio
+.vs/
+
+# ============================================================================
+# OPERATING SYSTEM
+# ============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+._*
+.DocumentRevisions-V100
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+.Trash-*
+
+# ============================================================================
+# BUILD & LOGS
+# ============================================================================
+
+# Log files
+*.log
+logs/
+log.txt
+debug.log
+terraform.log
+tflog
+
+# Backup files
+*.backup
+*.bak
+*.tmp
+*.temp
+.tmp/
+build/
+dist/
+
+# ============================================================================
+# PYTHON (if using Terraform Cloud API or custom scripts)
+# ============================================================================
+
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ============================================================================
+# NODE.js (if using Terraform Cloud webhooks or Node scripts)
+# ============================================================================
+
+node_modules/
+package-lock.json
+yarn.lock
+npm-debug.log
+.npm
+
+# ============================================================================
+# RUBY (if using Ruby-based Terraform tools)
+# ============================================================================
+
+Gemfile.lock
+*.gem
+.bundle/
+
+# ============================================================================
+# TERRAFORM CLOUD / TERRAFORM ENTERPRISE
+# ============================================================================
+
+terraform.cloud
+terraform.enterprise
+.tfcloud/
+.tfc-token
+
+# ============================================================================
+# CI/CD & AUTOMATION
+# ============================================================================
+
+# GitHub Actions
+.github/workflows/secrets.yml
+github-token
+github-credentials
+
+# GitLab CI
+gitlab-token
+gitlab-credentials
+
+# Jenkins
+jenkins-credentials
+
+# CircleCI
+circleci-token
+
+# ============================================================================
+# ENVIRONMENT & DEVELOPMENT
+# ============================================================================
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+.envrc
+
+# Development files
+debug/
+scratch/
+sandbox/
+playground/
+test-output/
+tmp/
+
+# ============================================================================
+# DOCUMENTATION BUILD & ARTIFACTS
+# ============================================================================
+
+site/
+docs/_build/
+docs/.venv/
+*.md.bak
+
+# ============================================================================
+# LINTING & SECURITY TOOLS
+# ============================================================================
+
+# tflint
+.tflint.hcl
+.tflint_cache/
+
+# Pre-commit framework
+.pre-commit-config.yaml.bak
+
+# ============================================================================
+# ALLOWLIST - Files to ALWAYS track (negate rules above)
+# ============================================================================
+
+# DO NOT IGNORE THESE FILES
+!.gitkeep
+!**/.gitkeep
+!.github/
+!.gitignore
+!.editorconfig
+!.gitattributes
+
+# Configuration examples (safe to commit)
+!*.example
+!sample*
+
+# Documentation (always track)
+!README.md
+!*.md
+!docs/
+
+# Terraform modules (always track)
+!modules/
+!envs/

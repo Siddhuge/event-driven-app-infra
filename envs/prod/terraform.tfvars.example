@@ -1,0 +1,23 @@
+# Copy this file to terraform.tfvars and update with your values
+# IMPORTANT: Keep sensitive values out of version control!
+
+environment  = "prod"
+location     = "Central India"
+project_name = "event-driven"
+
+# PRODUCTION: Set authorized IP ranges for API server access
+# This is CRITICAL for security - only allow known IPs
+aks_authorized_ips = [
+  # "203.0.113.0/24",   # Example: Your organization's IP range
+  # "198.51.100.0/25"   # Example: VPN gateway IP
+]
+
+tags = {
+  "Managed-By"   = "Terraform"
+  "Cost-Center"  = "Engineering"
+  "Compliance"   = "SOC2"
+  "Owner"        = "Platform-Team"
+  "Backup"       = "true"
+  "Environment"  = "Production"
+  "CriticalData" = "true"
+}
