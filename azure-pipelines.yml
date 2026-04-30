@@ -17,7 +17,7 @@ parameters:
     default: 'false'
 
 variables:
-  azureServiceConnection: REPLACE_WITH_AZURE_SERVICE_CONNECTION_NAME
+  azureServiceConnection: IAC-Conn
   terraformVersion: 1.5.7
   terraformWorkingDirectory: envs/dev
   terraformPlanFile: tfplan
