@@ -11,7 +11,7 @@ pr:
       - main
 
 variables:
-  azureServiceConnection: azure-sc
+  azureServiceConnection: IAC-Conn
   terraformVersion: 1.5.7
 
 stages:
