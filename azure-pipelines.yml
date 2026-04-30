@@ -38,7 +38,7 @@ stages:
               --quiet \
               --compact \
               --output cli \
-              --soft-fail false
+              --soft-fail 
           displayName: Run Checkov Scan
 
 # =========================================
