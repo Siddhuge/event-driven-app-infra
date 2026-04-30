@@ -10,111 +10,248 @@ pr:
     include:
       - main
 
-parameters:
-  - name: applyChanges
-    displayName: Apply Terraform changes
-    type: string
-    default: 'false'
-
 variables:
-  azureServiceConnection: IAC-Conn
+  azureServiceConnection: azure-sc
   terraformVersion: 1.5.7
-  terraformWorkingDirectory: envs/dev
-  terraformPlanFile: tfplan
-  terraformPlanTextFile: tfplan.txt
 
 stages:
-  - stage: TerraformDev
-    displayName: Terraform Dev
-    jobs:
-      - job: Plan
-        displayName: Validate and plan
-        pool:
-          vmImage: ubuntu-latest
-        steps:
-          - checkout: self
 
-          - script: |
-              set -euo pipefail
+# =========================================
+# 🔐 SECURITY SCAN (GLOBAL)
+# =========================================
+- stage: SecurityScan
+  displayName: 🔐 Terraform Security Scan
+  jobs:
+    - job: Checkov
+      pool:
+        vmImage: ubuntu-latest
+      steps:
+        - checkout: self
 
-              curl -fsSLo terraform.zip "https://releases.hashicorp.com/terraform/$(terraformVersion)/terraform_$(terraformVersion)_linux_amd64.zip"
-              unzip -q terraform.zip
-              sudo mv terraform /usr/local/bin/terraform
-              terraform version
-            displayName: Install Terraform
+        - script: |
+            set -e
+            pip install checkov
 
-          - task: AzureCLI@2
-            displayName: Terraform fmt, init, validate, and plan
-            inputs:
-              azureSubscription: $(azureServiceConnection)
-              addSpnToEnvironment: true
-              scriptType: bash
-              scriptLocation: inlineScript
-              workingDirectory: $(terraformWorkingDirectory)
-              inlineScript: |
-                set -euo pipefail
+            echo "🔍 Running Checkov scan..."
+            checkov -d . \
+              --framework terraform \
+              --quiet \
+              --compact \
+              --output cli \
+              --soft-fail false
+          displayName: Run Checkov Scan
 
-                export ARM_CLIENT_ID="${servicePrincipalId}"
-                export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
-                export ARM_TENANT_ID="${tenantId}"
-                if [ -n "${idToken:-}" ]; then
-                  export ARM_USE_OIDC=true
-                  export ARM_OIDC_TOKEN="${idToken}"
-                else
-                  export ARM_CLIENT_SECRET="${servicePrincipalKey}"
-                fi
+# =========================================
+# DEV
+# =========================================
+- stage: Dev_Plan
+  dependsOn: SecurityScan
+  jobs:
+    - job: Plan
+      pool:
+        vmImage: ubuntu-latest
+      steps:
+        - checkout: self
 
-                cat > ci.auto.tfvars <<'EOF'
-                environment  = "dev"
-                location     = "Central India"
-                project_name = "event-driven"
-                created_date = "2026-04-29"
+        - script: |
+            curl -fsSLo terraform.zip "https://releases.hashicorp.com/terraform/$(terraformVersion)/terraform_$(terraformVersion)_linux_amd64.zip"
+            unzip -q terraform.zip
+            sudo mv terraform /usr/local/bin/terraform
+          displayName: Install Terraform
 
-                aks_authorized_ips = []
+        - task: AzureCLI@2
+          inputs:
+            azureSubscription: $(azureServiceConnection)
+            addSpnToEnvironment: true
+            scriptType: bash
+            workingDirectory: terraform/envs/dev
+            scriptLocation: inlineScript
+            inlineScript: |
+              set -e
 
-                tags = {
-                  "Managed-By"  = "Terraform"
-                  "Cost-Center" = "Engineering"
-                  "Compliance"  = "SOC2"
-                  "Owner"       = "Platform-Team"
-                  "Backup"      = "true"
-                }
-                EOF
+              export ARM_CLIENT_ID="${servicePrincipalId}"
+              export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+              export ARM_TENANT_ID="${tenantId}"
+              export ARM_CLIENT_SECRET="${servicePrincipalKey}"
 
-                terraform fmt -check -recursive ../..
-                terraform init -input=false
-                terraform validate
-                terraform plan -input=false -out="$(terraformPlanFile)"
-                terraform show -no-color "$(terraformPlanFile)" > "$(terraformPlanTextFile)"
+              terraform init
 
-          - publish: $(terraformWorkingDirectory)/$(terraformPlanFile)
-            displayName: Publish Terraform binary plan
-            artifact: terraform-dev-plan
+              echo "🔍 Drift detection..."
+              terraform plan -detailed-exitcode -out=drift.tfplan || exit_code=$?
 
-          - publish: $(terraformWorkingDirectory)/$(terraformPlanTextFile)
-            displayName: Publish Terraform readable plan
-            artifact: terraform-dev-plan-text
+              if [ "${exit_code:-0}" -eq 2 ]; then
+                echo "⚠️ Drift detected (allowed in DEV)"
+              fi
 
-          - task: AzureCLI@2
-            displayName: Terraform apply
-            condition: and(succeeded(), eq('${{ parameters.applyChanges }}', 'true'))
-            inputs:
-              azureSubscription: $(azureServiceConnection)
-              addSpnToEnvironment: true
-              scriptType: bash
-              scriptLocation: inlineScript
-              workingDirectory: $(terraformWorkingDirectory)
-              inlineScript: |
-                set -euo pipefail
+              terraform plan -out=tfplan
 
-                export ARM_CLIENT_ID="${servicePrincipalId}"
-                export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
-                export ARM_TENANT_ID="${tenantId}"
-                if [ -n "${idToken:-}" ]; then
-                  export ARM_USE_OIDC=true
-                  export ARM_OIDC_TOKEN="${idToken}"
-                else
-                  export ARM_CLIENT_SECRET="${servicePrincipalKey}"
-                fi
+        - publish: terraform/envs/dev/tfplan
+          artifact: dev-plan
 
-                terraform apply -input=false "$(terraformPlanFile)"
+- stage: Dev_Apply
+  dependsOn: Dev_Plan
+  jobs:
+    - deployment: Apply
+      environment: dev
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - download: current
+                artifact: dev-plan
+
+              - task: AzureCLI@2
+                inputs:
+                  azureSubscription: $(azureServiceConnection)
+                  addSpnToEnvironment: true
+                  scriptType: bash
+                  workingDirectory: terraform/envs/dev
+                  scriptLocation: inlineScript
+                  inlineScript: |
+                    export ARM_CLIENT_ID="${servicePrincipalId}"
+                    export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+                    export ARM_TENANT_ID="${tenantId}"
+                    export ARM_CLIENT_SECRET="${servicePrincipalKey}"
+
+                    terraform init
+                    terraform apply -auto-approve "$(Pipeline.Workspace)/dev-plan/tfplan"
+
+# =========================================
+# UAT
+# =========================================
+- stage: UAT_Plan
+  dependsOn: Dev_Apply
+  jobs:
+    - job: Plan
+      pool:
+        vmImage: ubuntu-latest
+      steps:
+        - checkout: self
+
+        - task: AzureCLI@2
+          inputs:
+            azureSubscription: $(azureServiceConnection)
+            addSpnToEnvironment: true
+            scriptType: bash
+            workingDirectory: terraform/envs/uat
+            scriptLocation: inlineScript
+            inlineScript: |
+              set -e
+
+              export ARM_CLIENT_ID="${servicePrincipalId}"
+              export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+              export ARM_TENANT_ID="${tenantId}"
+              export ARM_CLIENT_SECRET="${servicePrincipalKey}"
+
+              terraform init
+
+              echo "🔍 Drift detection..."
+              terraform plan -detailed-exitcode || exit_code=$?
+
+              if [ "${exit_code:-0}" -eq 2 ]; then
+                echo "❌ Drift detected in UAT"
+                exit 1
+              fi
+
+              terraform plan -out=tfplan
+
+        - publish: terraform/envs/uat/tfplan
+          artifact: uat-plan
+
+- stage: UAT_Apply
+  dependsOn: UAT_Plan
+  jobs:
+    - deployment: Apply
+      environment: uat   # 👈 Add approval in DevOps UI
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - download: current
+                artifact: uat-plan
+
+              - task: AzureCLI@2
+                inputs:
+                  azureSubscription: $(azureServiceConnection)
+                  addSpnToEnvironment: true
+                  scriptType: bash
+                  workingDirectory: terraform/envs/uat
+                  scriptLocation: inlineScript
+                  inlineScript: |
+                    export ARM_CLIENT_ID="${servicePrincipalId}"
+                    export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+                    export ARM_TENANT_ID="${tenantId}"
+                    export ARM_CLIENT_SECRET="${servicePrincipalKey}"
+
+                    terraform init
+                    terraform apply -auto-approve "$(Pipeline.Workspace)/uat-plan/tfplan"
+
+# =========================================
+# PROD
+# =========================================
+- stage: Prod_Plan
+  dependsOn: UAT_Apply
+  jobs:
+    - job: Plan
+      pool:
+        vmImage: ubuntu-latest
+      steps:
+        - checkout: self
+
+        - task: AzureCLI@2
+          inputs:
+            azureSubscription: $(azureServiceConnection)
+            addSpnToEnvironment: true
+            scriptType: bash
+            workingDirectory: terraform/envs/prod
+            scriptLocation: inlineScript
+            inlineScript: |
+              set -e
+
+              export ARM_CLIENT_ID="${servicePrincipalId}"
+              export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+              export ARM_TENANT_ID="${tenantId}"
+              export ARM_CLIENT_SECRET="${servicePrincipalKey}"
+
+              terraform init
+
+              echo "🔍 Drift detection..."
+              terraform plan -detailed-exitcode || exit_code=$?
+
+              if [ "${exit_code:-0}" -eq 2 ]; then
+                echo "❌ Drift detected in PROD"
+                exit 1
+              fi
+
+              terraform plan -out=tfplan
+
+        - publish: terraform/envs/prod/tfplan
+          artifact: prod-plan
+
+- stage: Prod_Apply
+  dependsOn: Prod_Plan
+  jobs:
+    - deployment: Apply
+      environment: prod   # 👈 Strict approval required
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - download: current
+                artifact: prod-plan
+
+              - task: AzureCLI@2
+                inputs:
+                  azureSubscription: $(azureServiceConnection)
+                  addSpnToEnvironment: true
+                  scriptType: bash
+                  workingDirectory: terraform/envs/prod
+                  scriptLocation: inlineScript
+                  inlineScript: |
+                    export ARM_CLIENT_ID="${servicePrincipalId}"
+                    export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+                    export ARM_TENANT_ID="${tenantId}"
+                    export ARM_CLIENT_SECRET="${servicePrincipalKey}"
+
+                    terraform init
+                    terraform apply -auto-approve "$(Pipeline.Workspace)/prod-plan/tfplan"
