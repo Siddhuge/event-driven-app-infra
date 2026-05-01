@@ -30,7 +30,7 @@ stages:
 
         - script: |
             set -e
-            pip install checkov
+            pip install checkov==3.2.526
 
             echo "🔍 Running Checkov scan..."
             checkov -d . \
@@ -38,7 +38,7 @@ stages:
               --quiet \
               --compact \
               --output cli \
-              --soft-fail 
+              --soft-fail
           displayName: Run Checkov Scan
 
 # =========================================
@@ -57,6 +57,7 @@ stages:
             curl -fsSLo terraform.zip "https://releases.hashicorp.com/terraform/$(terraformVersion)/terraform_$(terraformVersion)_linux_amd64.zip"
             unzip -q terraform.zip
             sudo mv terraform /usr/local/bin/terraform
+            terraform version
           displayName: Install Terraform
 
         - task: AzureCLI@2
@@ -64,7 +65,6 @@ stages:
             azureSubscription: $(azureServiceConnection)
             addSpnToEnvironment: true
             scriptType: bash
-            workingDirectory: terraform/envs/dev
             scriptLocation: inlineScript
             inlineScript: |
               set -e
@@ -74,16 +74,22 @@ stages:
               export ARM_TENANT_ID="${tenantId}"
               export ARM_CLIENT_SECRET="${servicePrincipalKey}"
 
-              terraform init
+              echo "🔍 Drift detection (DEV)..."
 
-              echo "🔍 Drift detection..."
-              terraform plan -detailed-exitcode -out=drift.tfplan || exit_code=$?
+              terraform -chdir=terraform/envs/dev init -input=false
+
+              terraform -chdir=terraform/envs/dev plan -detailed-exitcode -out=drift.tfplan || exit_code=$?
 
               if [ "${exit_code:-0}" -eq 2 ]; then
                 echo "⚠️ Drift detected (allowed in DEV)"
+              elif [ "${exit_code:-0}" -eq 1 ]; then
+                echo "❌ Terraform error"
+                exit 1
+              else
+                echo "✅ No drift"
               fi
 
-              terraform plan -out=tfplan
+              terraform -chdir=terraform/envs/dev plan -out=tfplan
 
         - publish: terraform/envs/dev/tfplan
           artifact: dev-plan
@@ -105,16 +111,17 @@ stages:
                   azureSubscription: $(azureServiceConnection)
                   addSpnToEnvironment: true
                   scriptType: bash
-                  workingDirectory: terraform/envs/dev
                   scriptLocation: inlineScript
                   inlineScript: |
+                    set -e
+
                     export ARM_CLIENT_ID="${servicePrincipalId}"
                     export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
                     export ARM_TENANT_ID="${tenantId}"
                     export ARM_CLIENT_SECRET="${servicePrincipalKey}"
 
-                    terraform init
-                    terraform apply -auto-approve "$(Pipeline.Workspace)/dev-plan/tfplan"
+                    terraform -chdir=terraform/envs/dev init -input=false
+                    terraform -chdir=terraform/envs/dev apply -auto-approve "$(Pipeline.Workspace)/dev-plan/tfplan"
 
 # =========================================
 # UAT
@@ -133,7 +140,6 @@ stages:
             azureSubscription: $(azureServiceConnection)
             addSpnToEnvironment: true
             scriptType: bash
-            workingDirectory: terraform/envs/uat
             scriptLocation: inlineScript
             inlineScript: |
               set -e
@@ -143,17 +149,23 @@ stages:
               export ARM_TENANT_ID="${tenantId}"
               export ARM_CLIENT_SECRET="${servicePrincipalKey}"
 
-              terraform init
+              echo "🔍 Drift detection (UAT)..."
 
-              echo "🔍 Drift detection..."
-              terraform plan -detailed-exitcode || exit_code=$?
+              terraform -chdir=terraform/envs/uat init -input=false
+
+              terraform -chdir=terraform/envs/uat plan -detailed-exitcode || exit_code=$?
 
               if [ "${exit_code:-0}" -eq 2 ]; then
                 echo "❌ Drift detected in UAT"
                 exit 1
+              elif [ "${exit_code:-0}" -eq 1 ]; then
+                echo "❌ Terraform error"
+                exit 1
+              else
+                echo "✅ No drift"
               fi
 
-              terraform plan -out=tfplan
+              terraform -chdir=terraform/envs/uat plan -out=tfplan
 
         - publish: terraform/envs/uat/tfplan
           artifact: uat-plan
@@ -162,7 +174,7 @@ stages:
   dependsOn: UAT_Plan
   jobs:
     - deployment: Apply
-      environment: uat   # 👈 Add approval in DevOps UI
+      environment: uat
       strategy:
         runOnce:
           deploy:
@@ -175,16 +187,17 @@ stages:
                   azureSubscription: $(azureServiceConnection)
                   addSpnToEnvironment: true
                   scriptType: bash
-                  workingDirectory: terraform/envs/uat
                   scriptLocation: inlineScript
                   inlineScript: |
+                    set -e
+
                     export ARM_CLIENT_ID="${servicePrincipalId}"
                     export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
                     export ARM_TENANT_ID="${tenantId}"
                     export ARM_CLIENT_SECRET="${servicePrincipalKey}"
 
-                    terraform init
-                    terraform apply -auto-approve "$(Pipeline.Workspace)/uat-plan/tfplan"
+                    terraform -chdir=terraform/envs/uat init -input=false
+                    terraform -chdir=terraform/envs/uat apply -auto-approve "$(Pipeline.Workspace)/uat-plan/tfplan"
 
 # =========================================
 # PROD
@@ -203,7 +216,6 @@ stages:
             azureSubscription: $(azureServiceConnection)
             addSpnToEnvironment: true
             scriptType: bash
-            workingDirectory: terraform/envs/prod
             scriptLocation: inlineScript
             inlineScript: |
               set -e
@@ -213,17 +225,23 @@ stages:
               export ARM_TENANT_ID="${tenantId}"
               export ARM_CLIENT_SECRET="${servicePrincipalKey}"
 
-              terraform init
+              echo "🔍 Drift detection (PROD)..."
 
-              echo "🔍 Drift detection..."
-              terraform plan -detailed-exitcode || exit_code=$?
+              terraform -chdir=terraform/envs/prod init -input=false
+
+              terraform -chdir=terraform/envs/prod plan -detailed-exitcode || exit_code=$?
 
               if [ "${exit_code:-0}" -eq 2 ]; then
                 echo "❌ Drift detected in PROD"
                 exit 1
+              elif [ "${exit_code:-0}" -eq 1 ]; then
+                echo "❌ Terraform error"
+                exit 1
+              else
+                echo "✅ No drift"
               fi
 
-              terraform plan -out=tfplan
+              terraform -chdir=terraform/envs/prod plan -out=tfplan
 
         - publish: terraform/envs/prod/tfplan
           artifact: prod-plan
@@ -232,7 +250,7 @@ stages:
   dependsOn: Prod_Plan
   jobs:
     - deployment: Apply
-      environment: prod   # 👈 Strict approval required
+      environment: prod
       strategy:
         runOnce:
           deploy:
@@ -245,13 +263,14 @@ stages:
                   azureSubscription: $(azureServiceConnection)
                   addSpnToEnvironment: true
                   scriptType: bash
-                  workingDirectory: terraform/envs/prod
                   scriptLocation: inlineScript
                   inlineScript: |
+                    set -e
+
                     export ARM_CLIENT_ID="${servicePrincipalId}"
                     export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
                     export ARM_TENANT_ID="${tenantId}"
                     export ARM_CLIENT_SECRET="${servicePrincipalKey}"
 
-                    terraform init
-                    terraform apply -auto-approve "$(Pipeline.Workspace)/prod-plan/tfplan"
+                    terraform -chdir=terraform/envs/prod init -input=false
+                    terraform -chdir=terraform/envs/prod apply -auto-approve "$(Pipeline.Workspace)/prod-plan/tfplan"
