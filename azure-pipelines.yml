@@ -16,203 +16,208 @@ variables:
 
 stages:
 
-# =========================================
-# 🔐 SECURITY SCAN
-# =========================================
-- stage: SecurityScan
-  displayName: 🔐 Terraform Security Scan
-  jobs:
-    - job: Checkov
-      pool:
-        vmImage: ubuntu-latest
-      steps:
-        - checkout: self
+  # =========================================
+  # 🔐 SECURITY SCAN
+  # =========================================
+  - stage: SecurityScan
+    displayName: 🔐 Terraform Security Scan
+    jobs:
+      - job: Checkov
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
 
-        - script: |
-            set -e
-            pip install checkov==3.2.526
-
-            echo "🔍 Running Checkov scan..."
-            checkov -d . \
-              --framework terraform \
-              --quiet \
-              --compact \
-              --output cli \
-              --soft-fail
-          displayName: Run Checkov Scan
-
-# =========================================
-# DEV
-# =========================================
-- stage: Dev_Plan
-  dependsOn: SecurityScan
-  jobs:
-    - job: Plan
-      pool:
-        vmImage: ubuntu-latest
-      steps:
-        - checkout: self
-
-        - script: |
-            curl -fsSLo terraform.zip "https://releases.hashicorp.com/terraform/$(terraformVersion)/terraform_$(terraformVersion)_linux_amd64.zip"
-            unzip -q terraform.zip
-            sudo mv terraform /usr/local/bin/terraform
-            terraform version
-          displayName: Install Terraform
-
-        - task: AzureCLI@2
-          displayName: Terraform Plan + Drift (DEV)
-          inputs:
-            azureSubscription: $(azureServiceConnection)
-            addSpnToEnvironment: true
-            scriptType: bash
-            scriptLocation: inlineScript
-            inlineScript: |
+          - script: |
               set -e
+              pip install checkov==3.2.526
 
-              BASE_DIR="$(System.DefaultWorkingDirectory)"
-              TF_DIR="$BASE_DIR/envs/dev"
+              echo "🔍 Running Checkov scan..."
+              checkov -d . \
+                --framework terraform \
+                --quiet \
+                --compact \
+                --output cli \
+                --soft-fail
+            displayName: Run Checkov Scan
 
-              echo "📁 Using TF_DIR: $TF_DIR"
-              ls -la $TF_DIR
+  # =========================================
+  # DEV
+  # =========================================
+  - stage: Dev_Plan
+    dependsOn: SecurityScan
+    jobs:
+      - job: Plan
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
 
-              export ARM_CLIENT_ID="${servicePrincipalId}"
-              export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
-              export ARM_TENANT_ID="${tenantId}"
-              export ARM_CLIENT_SECRET="${servicePrincipalKey}"
-              export ARM_USE_OIDC=true
+          - script: |
+              curl -fsSLo terraform.zip "https://releases.hashicorp.com/terraform/$(terraformVersion)/terraform_$(terraformVersion)_linux_amd64.zip"
+              unzip -q terraform.zip
+              sudo mv terraform /usr/local/bin/terraform
+              terraform version
+            displayName: Install Terraform
 
-              terraform -chdir="$TF_DIR" init -input=false
+          - task: AzureCLI@2
+            displayName: Terraform Plan + Drift (DEV)
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              addSpnToEnvironment: true
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -e
 
-              echo "🔍 Drift detection (DEV)..."
-              terraform -chdir="$TF_DIR" plan -detailed-exitcode -out=drift.tfplan || exit_code=$?
+                TF_DIR="$(System.DefaultWorkingDirectory)/envs/dev"
 
-              if [ "${exit_code:-0}" -eq 2 ]; then
-                echo "⚠️ Drift detected (allowed in DEV)"
-              elif [ "${exit_code:-0}" -eq 1 ]; then
-                echo "❌ Terraform error"
-                exit 1
-              else
-                echo "✅ No drift"
-              fi
+                echo "📁 Using TF_DIR: $TF_DIR"
+                ls -la $TF_DIR
 
-              terraform -chdir="$TF_DIR" plan -out=tfplan
+                echo "🔐 Setting Terraform auth variables..."
 
-        - publish: envs/dev/tfplan
-          artifact: dev-plan
+                export ARM_CLIENT_ID="${servicePrincipalId}"
+                export ARM_CLIENT_SECRET="${servicePrincipalKey}"
+                export ARM_TENANT_ID="${tenantId}"
+                export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
 
-- stage: Dev_Apply
-  dependsOn: Dev_Plan
-  jobs:
-    - deployment: Apply
-      environment: dev
-      strategy:
-        runOnce:
-          deploy:
-            steps:
-              - download: current
-                artifact: dev-plan
+                # 🔥 CRITICAL FIX
+                export ARM_USE_OIDC=true
 
-              - task: AzureCLI@2
-                displayName: Apply DEV
-                inputs:
-                  azureSubscription: $(azureServiceConnection)
-                  addSpnToEnvironment: true
-                  scriptType: bash
-                  scriptLocation: inlineScript
-                  inlineScript: |
-                    set -e
+                echo "ARM_CLIENT_ID=$ARM_CLIENT_ID"
+                echo "ARM_TENANT_ID=$ARM_TENANT_ID"
 
-                    TF_DIR="$(System.DefaultWorkingDirectory)/envs/dev"
+                terraform -chdir="$TF_DIR" init -input=false
 
-                    export ARM_CLIENT_ID="${servicePrincipalId}"
-                    export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
-                    export ARM_TENANT_ID="${tenantId}"
-                    export ARM_CLIENT_SECRET="${servicePrincipalKey}"
+                echo "🔍 Drift detection..."
+                terraform -chdir="$TF_DIR" plan -detailed-exitcode -out=drift.tfplan || exit_code=$?
 
-                    terraform -chdir="$TF_DIR" init -input=false
-                    terraform -chdir="$TF_DIR" apply -auto-approve "$(Pipeline.Workspace)/dev-plan/tfplan"
+                if [ "${exit_code:-0}" -eq 2 ]; then
+                  echo "⚠️ Drift detected (DEV)"
+                elif [ "${exit_code:-0}" -eq 1 ]; then
+                  echo "❌ Terraform error"
+                  exit 1
+                else
+                  echo "✅ No drift"
+                fi
 
-# =========================================
-# PROD
-# =========================================
-- stage: Prod_Plan
-  dependsOn: Dev_Apply
-  jobs:
-    - job: Plan
-      pool:
-        vmImage: ubuntu-latest
-      steps:
-        - checkout: self
+                terraform -chdir="$TF_DIR" plan -out=tfplan
+          - publish: envs/dev/tfplan
+            artifact: dev-plan
 
-        - task: AzureCLI@2
-          displayName: Terraform Plan + Drift (PROD)
-          inputs:
-            azureSubscription: $(azureServiceConnection)
-            addSpnToEnvironment: true
-            scriptType: bash
-            scriptLocation: inlineScript
-            inlineScript: |
-              set -e
+  - stage: Dev_Apply
+    dependsOn: Dev_Plan
+    jobs:
+      - deployment: Apply
+        environment: dev
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: dev-plan
 
-              TF_DIR="$(System.DefaultWorkingDirectory)/envs/prod"
+                - task: AzureCLI@2
+                  displayName: Apply DEV
+                  inputs:
+                    azureSubscription: $(azureServiceConnection)
+                    addSpnToEnvironment: true
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -e
 
-              echo "📁 Using TF_DIR: $TF_DIR"
-              ls -la $TF_DIR
+                      TF_DIR="$(System.DefaultWorkingDirectory)/envs/dev"
 
-              export ARM_CLIENT_ID="${servicePrincipalId}"
-              export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
-              export ARM_TENANT_ID="${tenantId}"
-              export ARM_CLIENT_SECRET="${servicePrincipalKey}"
+                      export ARM_CLIENT_ID="${servicePrincipalId}"
+                      export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+                      export ARM_TENANT_ID="${tenantId}"
+                      export ARM_CLIENT_SECRET="${servicePrincipalKey}"
 
-              terraform -chdir="$TF_DIR" init -input=false
+                      terraform -chdir="$TF_DIR" init -input=false
+                      terraform -chdir="$TF_DIR" apply -auto-approve "$(Pipeline.Workspace)/dev-plan/tfplan"
 
-              echo "🔍 Drift detection (PROD)..."
-              terraform -chdir="$TF_DIR" plan -detailed-exitcode || exit_code=$?
+  # =========================================
+  # PROD
+  # =========================================
+  - stage: Prod_Plan
+    dependsOn: Dev_Apply
+    jobs:
+      - job: Plan
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
 
-              if [ "${exit_code:-0}" -eq 2 ]; then
-                echo "❌ Drift detected in PROD"
-                exit 1
-              elif [ "${exit_code:-0}" -eq 1 ]; then
-                echo "❌ Terraform error"
-                exit 1
-              else
-                echo "✅ No drift"
-              fi
+          - task: AzureCLI@2
+            displayName: Terraform Plan + Drift (PROD)
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              addSpnToEnvironment: true
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -e
 
-              terraform -chdir="$TF_DIR" plan -out=tfplan
+                TF_DIR="$(System.DefaultWorkingDirectory)/envs/prod"
 
-        - publish: envs/prod/tfplan
-          artifact: prod-plan
+                echo "📁 Using TF_DIR: $TF_DIR"
+                ls -la $TF_DIR
 
-- stage: Prod_Apply
-  dependsOn: Prod_Plan
-  jobs:
-    - deployment: Apply
-      environment: prod   # 👈 Add approval in UI
-      strategy:
-        runOnce:
-          deploy:
-            steps:
-              - download: current
-                artifact: prod-plan
+                export ARM_CLIENT_ID="${servicePrincipalId}"
+                export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+                export ARM_TENANT_ID="${tenantId}"
+                export ARM_CLIENT_SECRET="${servicePrincipalKey}"
 
-              - task: AzureCLI@2
-                displayName: Apply PROD
-                inputs:
-                  azureSubscription: $(azureServiceConnection)
-                  addSpnToEnvironment: true
-                  scriptType: bash
-                  scriptLocation: inlineScript
-                  inlineScript: |
-                    set -e
+                terraform -chdir="$TF_DIR" init -input=false
 
-                    TF_DIR="$(System.DefaultWorkingDirectory)/envs/prod"
+                echo "🔍 Drift detection (PROD)..."
+                terraform -chdir="$TF_DIR" plan -detailed-exitcode || exit_code=$?
 
-                    export ARM_CLIENT_ID="${servicePrincipalId}"
-                    export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
-                    export ARM_TENANT_ID="${tenantId}"
-                    export ARM_CLIENT_SECRET="${servicePrincipalKey}"
+                if [ "${exit_code:-0}" -eq 2 ]; then
+                  echo "❌ Drift detected in PROD"
+                  exit 1
+                elif [ "${exit_code:-0}" -eq 1 ]; then
+                  echo "❌ Terraform error"
+                  exit 1
+                else
+                  echo "✅ No drift"
+                fi
 
-                    terraform -chdir="$TF_DIR" init -input=false
-                    terraform -chdir="$TF_DIR" apply -auto-approve "$(Pipeline.Workspace)/prod-plan/tfplan"
+                terraform -chdir="$TF_DIR" plan -out=tfplan
+
+          - publish: envs/prod/tfplan
+            artifact: prod-plan
+
+  - stage: Prod_Apply
+    dependsOn: Prod_Plan
+    jobs:
+      - deployment: Apply
+        environment: prod # 👈 Add approval in UI
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: prod-plan
+
+                - task: AzureCLI@2
+                  displayName: Apply PROD
+                  inputs:
+                    azureSubscription: $(azureServiceConnection)
+                    addSpnToEnvironment: true
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -e
+
+                      TF_DIR="$(System.DefaultWorkingDirectory)/envs/prod"
+
+                      export ARM_CLIENT_ID="${servicePrincipalId}"
+                      export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+                      export ARM_TENANT_ID="${tenantId}"
+                      export ARM_CLIENT_SECRET="${servicePrincipalKey}"
+
+                      terraform -chdir="$TF_DIR" init -input=false
+                      terraform -chdir="$TF_DIR" apply -auto-approve "$(Pipeline.Workspace)/prod-plan/tfplan"
