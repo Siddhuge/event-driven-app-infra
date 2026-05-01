@@ -47,6 +47,16 @@ output "vnet_id" {
   description = "Virtual Network ID"
 }
 
+output "jumpbox_public_ip" {
+  value       = module.jumpbox.public_ip_address
+  description = "Public IP address of the dev jumpbox"
+}
+
+output "jumpbox_ssh_command" {
+  value       = module.jumpbox.ssh_command
+  description = "SSH command for the dev jumpbox"
+}
+
 output "environment" {
   value       = var.environment
   description = "Deployment environment"

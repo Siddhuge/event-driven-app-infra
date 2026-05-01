@@ -54,11 +54,62 @@ variable "tags" {
 
 variable "aks_authorized_ips" {
   type        = list(string)
-  description = "IP ranges authorized to access AKS API server"
-  default     = ["106.213.87.181/32"]
+  description = "Public IP CIDR ranges allowed to access the dev AKS API server only when private access is disabled"
+  default     = ["106.213.87.215/32"]
 
   validation {
     condition     = alltrue([for ip in var.aks_authorized_ips : can(cidrhost(ip, 0))])
     error_message = "All entries must be valid CIDR blocks."
   }
+}
+
+variable "aks_private_cluster_enabled" {
+  type        = bool
+  description = "Whether the dev AKS API server should be private"
+  default     = true
+}
+
+variable "aks_private_cluster_public_fqdn_enabled" {
+  type        = bool
+  description = "Whether a public DNS name should resolve to the private AKS API endpoint. Network access still requires VPN/peering/private routing."
+  default     = true
+}
+
+variable "jumpbox_enabled" {
+  type        = bool
+  description = "Whether to create a dev jumpbox in the AKS VNet"
+  default     = false
+}
+
+variable "jumpbox_admin_username" {
+  type        = string
+  description = "Admin username for the jumpbox VM"
+  default     = "azureuser"
+}
+
+variable "jumpbox_admin_ssh_public_key" {
+  type        = string
+  description = "SSH public key allowed to log in to the jumpbox"
+  default     = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCu3abmLfz289m8GAmK2n1Fl747gG6e1+CRgxWOVkevA5ihS8s4OAtyOomAdAcIvuRGNTTYZd0oyiCplausE4cCftZh3POcMGTkoT/BWRnsmpyrB19kzE1CoSwnBiVmxDpsj0gCFw5uL3HwDVRRlAABRZV9ooFsOx11x8ObCtg3DFKGxA70BZjYjlgqvdQKv59HgsQ/vIjZfA7goRg53iv443/YCdzyduvOkCJr7DJCELVsR4Go6ff6FRxHaQG6IGly58+DB6I/DkZGHHmqZONvj9NlGlDlUUW9kgHeFRG5qCs7G3bR+V69CEQ7uiZyroF6dBpTndNQ/XQErxfHvtwr.ssh"
+  validation {
+    condition     = var.jumpbox_admin_ssh_public_key == "" || can(regex("^ssh-rsa ", var.jumpbox_admin_ssh_public_key))
+    error_message = "jumpbox_admin_ssh_public_key must start with ssh-rsa."
+  }
+}
+
+variable "jumpbox_allowed_ssh_cidrs" {
+  type        = list(string)
+  description = "CIDR ranges allowed to SSH to the jumpbox"
+  default     = []
+
+  validation {
+    condition     = alltrue([for cidr in var.jumpbox_allowed_ssh_cidrs : can(cidrhost(cidr, 0))])
+    error_message = "All jumpbox SSH source ranges must be valid CIDR blocks."
+  }
+}
+
+variable "jumpbox_vm_size" {
+  type        = string
+  description = "Azure VM size for the jumpbox"
+  default     = "Standard_B2s"
 }
