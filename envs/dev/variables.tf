@@ -55,7 +55,7 @@ variable "tags" {
 variable "aks_authorized_ips" {
   type        = list(string)
   description = "IP ranges authorized to access AKS API server"
-  default     = ["106.213.87.181"]
+  default     = ["106.213.87.181/32"]
 
   validation {
     condition     = alltrue([for ip in var.aks_authorized_ips : can(cidrhost(ip, 0))])
