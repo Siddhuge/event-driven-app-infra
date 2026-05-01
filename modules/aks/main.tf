@@ -3,12 +3,11 @@ resource "azurerm_kubernetes_cluster" "aks" {
   location            = var.location
   resource_group_name = var.rg_name
   dns_prefix          = replace(var.name, "-", "")
-  kubernetes_version  = "1.27"
+  kubernetes_version  = "1.34"
 
-  # Security: Private cluster with API server restricted
-  private_cluster_enabled             = true
-  api_server_authorized_ip_ranges     = length(var.authorized_ip_ranges) > 0 ? var.authorized_ip_ranges : null
-  private_cluster_public_fqdn_enabled = false
+  # Security: Keep the API private by default; optional public FQDN still resolves to a private endpoint.
+  private_cluster_enabled             = var.private_cluster_enabled
+  private_cluster_public_fqdn_enabled = var.private_cluster_public_fqdn_enabled
 
   default_node_pool {
     name                = "system"
@@ -23,7 +22,7 @@ resource "azurerm_kubernetes_cluster" "aks" {
     # Security settings
     os_disk_size_gb             = 50
     os_disk_type                = "Managed"
-    temporary_name_for_rotation = "system-tmp"
+    temporary_name_for_rotation = "tmp1" # Must be 1-12 lowercase alphanumeric chars only
   }
 
   # Identity and Access
@@ -35,10 +34,18 @@ resource "azurerm_kubernetes_cluster" "aks" {
   network_profile {
     network_plugin    = "azure" # CNI for Azure native networking
     network_policy    = "azure" # Enforces NSG-based policies
-    service_cidr      = "10.0.0.0/16"
-    dns_service_ip    = "10.0.0.10"
+    service_cidr      = "10.2.0.0/16"
+    dns_service_ip    = "10.2.0.10"
     load_balancer_sku = "standard"
     outbound_type     = "userDefinedRouting"
+  }
+
+  dynamic "api_server_access_profile" {
+    for_each = var.private_cluster_enabled || length(var.authorized_ip_ranges) == 0 ? [] : [1]
+
+    content {
+      authorized_ip_ranges = var.authorized_ip_ranges
+    }
   }
 
   # RBAC and Azure AD integration
@@ -47,13 +54,14 @@ resource "azurerm_kubernetes_cluster" "aks" {
   # Azure Policy for compliance
   azure_policy_enabled = true
 
-  # OMS agent for monitoring (optional, configure as needed)
-  dynamic "oms_agent" {
-    for_each = var.key_vault_id != "" ? [1] : []
-    content {
-      log_analytics_workspace_id = "" # Configure workspace ID as needed
-    }
-  }
+  # Enable OIDC issuer (required for Workload Identity)
+  oidc_issuer_enabled = true
+
+  # OMS agent for monitoring (optional, requires log_analytics_workspace_id)
+  # Uncomment and set log_analytics_workspace_id to enable
+  # oms_agent {
+  #   log_analytics_workspace_id = var.log_analytics_workspace_id
+  # }
 
   # Cluster tagging
   tags = var.tags

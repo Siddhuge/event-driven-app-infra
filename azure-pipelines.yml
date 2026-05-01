@@ -13,6 +13,10 @@ pr:
 variables:
   azureServiceConnection: IAC-Conn
   terraformVersion: 1.5.7
+  jumpboxEnabled: 'false'
+  jumpboxAdminUsername: azureuser
+  jumpboxAdminSshPublicKey: ''
+  jumpboxAllowedSshCidr: ''
 
 stages:
 
@@ -77,21 +81,29 @@ stages:
 
                 echo "🔐 Setting Terraform auth variables..."
 
-                echo "🔐 Setting Terraform auth variables..."
-
                 export ARM_CLIENT_ID="${servicePrincipalId}"
                 export ARM_TENANT_ID="${tenantId}"
                 export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
 
-                # 🔥 CRITICAL (OIDC FIX)
                 export ARM_USE_OIDC=true
                 export ARM_OIDC_TOKEN="${idToken}"
 
-                # DEBUG
-                echo "ARM_CLIENT_ID=$ARM_CLIENT_ID"
-                echo "ARM_TENANT_ID=$ARM_TENANT_ID"
-                echo "OIDC TOKEN LENGTH: ${#ARM_OIDC_TOKEN}"
-                echo "ID TOKEN: ${idToken:0:20}"
+                cat > "$TF_DIR/pipeline.auto.tfvars" <<EOF
+                jumpbox_enabled        = $(jumpboxEnabled)
+                jumpbox_admin_username = "$(jumpboxAdminUsername)"
+                EOF
+
+                if [ "$(jumpboxEnabled)" = "true" ]; then
+                  if [ -z "$(jumpboxAdminSshPublicKey)" ] || [ -z "$(jumpboxAllowedSshCidr)" ]; then
+                    echo "jumpboxAdminSshPublicKey and jumpboxAllowedSshCidr are required when jumpboxEnabled is true."
+                    exit 1
+                  fi
+
+                  cat >> "$TF_DIR/pipeline.auto.tfvars" <<EOF
+                jumpbox_admin_ssh_public_key = "$(jumpboxAdminSshPublicKey)"
+                jumpbox_allowed_ssh_cidrs    = ["$(jumpboxAllowedSshCidr)"]
+                EOF
+                fi
 
                 terraform -chdir="$TF_DIR" init -input=false
 
@@ -136,9 +148,10 @@ stages:
                       TF_DIR="$(System.DefaultWorkingDirectory)/envs/dev"
 
                       export ARM_CLIENT_ID="${servicePrincipalId}"
-                      export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
                       export ARM_TENANT_ID="${tenantId}"
-                      export ARM_CLIENT_SECRET="${servicePrincipalKey}"
+                      export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
+                      export ARM_USE_OIDC=true
+                      export ARM_OIDC_TOKEN="${idToken}"
 
                       terraform -chdir="$TF_DIR" init -input=false
                       terraform -chdir="$TF_DIR" apply -auto-approve "$(Pipeline.Workspace)/dev-plan/tfplan"

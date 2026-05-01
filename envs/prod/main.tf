@@ -49,16 +49,20 @@ module "kv" {
 }
 
 module "aks" {
-  source               = "../../modules/aks"
-  name                 = "${local.naming_prefix}-aks"
-  rg_name              = module.rg.name
-  location             = var.location
-  tags                 = local.common_tags
-  environment          = var.environment
-  subnet_id            = module.network.subnet_id
-  acr_id               = module.acr.id
-  key_vault_id         = module.kv.id
-  authorized_ip_ranges = var.aks_authorized_ips
+  source                              = "../../modules/aks"
+  name                                = "${local.naming_prefix}-aks"
+  rg_name                             = module.rg.name
+  location                            = var.location
+  tags                                = local.common_tags
+  environment                         = var.environment
+  subnet_id                           = module.network.subnet_id
+  acr_id                              = module.acr.id
+  key_vault_id                        = module.kv.id
+  authorized_ip_ranges                = var.aks_authorized_ips
+  private_cluster_enabled             = var.aks_private_cluster_enabled
+  private_cluster_public_fqdn_enabled = var.aks_private_cluster_public_fqdn_enabled
+
+  depends_on = [module.network]
 }
 
 data "azurerm_client_config" "current" {}

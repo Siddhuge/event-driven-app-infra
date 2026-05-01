@@ -45,9 +45,21 @@ variable "key_vault_id" {
   default     = ""
 }
 
+variable "private_cluster_enabled" {
+  type        = bool
+  description = "Whether the AKS API server should be private and reachable only through the VNet/private DNS path"
+  default     = true
+}
+
+variable "private_cluster_public_fqdn_enabled" {
+  type        = bool
+  description = "Whether a public FQDN should be created for a private AKS cluster"
+  default     = false
+}
+
 variable "authorized_ip_ranges" {
   type        = list(string)
-  description = "IP ranges authorized to access AKS API server"
+  description = "Public IP CIDR ranges allowed to access the AKS API server when private_cluster_enabled is false"
   default     = []
 
   validation {

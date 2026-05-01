@@ -3,6 +3,11 @@ output "subnet_id" {
   description = "ID of the AKS subnet"
 }
 
+output "jumpbox_subnet_id" {
+  value       = azurerm_subnet.jumpbox.id
+  description = "ID of the jumpbox subnet"
+}
+
 output "vnet_id" {
   value       = azurerm_virtual_network.vnet.id
   description = "ID of the virtual network"

@@ -15,8 +15,16 @@ resource "azurerm_subnet" "aks" {
   virtual_network_name = azurerm_virtual_network.vnet.name
   address_prefixes     = ["10.0.1.0/24"]
 
-  enforce_private_link_endpoint_network_policies = true
-  enforce_private_link_service_network_policies  = true
+  private_endpoint_network_policies             = "Disabled"
+  private_link_service_network_policies_enabled = false
+}
+
+# Jumpbox Subnet
+resource "azurerm_subnet" "jumpbox" {
+  name                 = "jumpbox-subnet"
+  resource_group_name  = var.rg_name
+  virtual_network_name = azurerm_virtual_network.vnet.name
+  address_prefixes     = ["10.0.2.0/24"]
 }
 
 # Network Security Group for AKS
@@ -46,4 +54,19 @@ resource "azurerm_network_security_rule" "allow_https" {
 resource "azurerm_subnet_network_security_group_association" "aks" {
   subnet_id                 = azurerm_subnet.aks.id
   network_security_group_id = azurerm_network_security_group.aks_nsg.id
+}
+
+# Route Table for AKS Subnet
+resource "azurerm_route_table" "aks" {
+  name                          = "${var.name}-aks-rt"
+  location                      = var.location
+  resource_group_name           = var.rg_name
+  disable_bgp_route_propagation = false
+  tags                          = var.tags
+}
+
+# Associate Route Table with AKS Subnet
+resource "azurerm_subnet_route_table_association" "aks" {
+  subnet_id      = azurerm_subnet.aks.id
+  route_table_id = azurerm_route_table.aks.id
 }

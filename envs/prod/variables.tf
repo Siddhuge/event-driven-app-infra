@@ -54,11 +54,23 @@ variable "tags" {
 
 variable "aks_authorized_ips" {
   type        = list(string)
-  description = "IP ranges authorized to access AKS API server"
+  description = "Public IP CIDR ranges allowed to access the prod AKS API server when private access is disabled"
   default     = []
 
   validation {
     condition     = alltrue([for ip in var.aks_authorized_ips : can(cidrhost(ip, 0))])
     error_message = "All entries must be valid CIDR blocks."
   }
+}
+
+variable "aks_private_cluster_enabled" {
+  type        = bool
+  description = "Whether the prod AKS API server should be private"
+  default     = true
+}
+
+variable "aks_private_cluster_public_fqdn_enabled" {
+  type        = bool
+  description = "Whether a public DNS name should resolve to the private AKS API endpoint. Network access still requires VPN/peering/private routing."
+  default     = false
 }
