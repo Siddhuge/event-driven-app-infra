@@ -38,14 +38,18 @@ module "acr" {
 }
 
 module "kv" {
-  source      = "../../modules/keyvault"
-  name        = "${local.naming_prefix}-kv"
-  rg_name     = module.rg.name
-  location    = var.location
-  tags        = local.common_tags
-  environment = var.environment
-  tenant_id   = data.azurerm_client_config.current.tenant_id
-  object_id   = data.azurerm_client_config.current.object_id
+  source                        = "../../modules/keyvault"
+  name                          = "${local.naming_prefix}-kv"
+  rg_name                       = module.rg.name
+  location                      = var.location
+  tags                          = local.common_tags
+  environment                   = var.environment
+  tenant_id                     = data.azurerm_client_config.current.tenant_id
+  object_id                     = data.azurerm_client_config.current.object_id
+  public_network_access_enabled = var.key_vault_public_network_access_enabled
+  network_acls_default_action   = var.key_vault_network_acls_default_action
+  network_acls_bypass           = var.key_vault_network_acls_bypass
+  secrets                       = var.key_vault_secrets
 }
 
 module "aks" {
@@ -88,9 +92,9 @@ module "jumpbox" {
 resource "azurerm_role_assignment" "jumpbox_reader" {
   count = var.jumpbox_enabled ? 1 : 0
 
-  scope              = "/subscriptions/${data.azurerm_client_config.current.subscription_id}"
+  scope                = "/subscriptions/${data.azurerm_client_config.current.subscription_id}"
   role_definition_name = "Reader"
-  principal_id       = module.jumpbox.principal_id
+  principal_id         = module.jumpbox.principal_id
 }
 
 # Grant jumpbox managed identity AKS admin role for cluster access

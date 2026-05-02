@@ -42,6 +42,11 @@ output "key_vault_uri" {
   sensitive   = false
 }
 
+output "key_vault_secret_names" {
+  value       = module.kv.secret_names
+  description = "Names of secrets created in Key Vault"
+}
+
 output "vnet_id" {
   value       = module.network.vnet_id
   description = "Virtual Network ID"

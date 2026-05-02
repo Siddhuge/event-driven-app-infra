@@ -113,3 +113,44 @@ variable "jumpbox_vm_size" {
   description = "Azure VM size for the jumpbox"
   default     = "Standard_B2s"
 }
+
+variable "key_vault_public_network_access_enabled" {
+  type        = bool
+  description = "Whether public network access is enabled for dev Key Vault. Keep enabled when Azure Pipelines must create secrets during first launch."
+  default     = true
+}
+
+variable "key_vault_network_acls_default_action" {
+  type        = string
+  description = "Default firewall action for dev Key Vault"
+  default     = "Allow"
+
+  validation {
+    condition     = contains(["Allow", "Deny"], var.key_vault_network_acls_default_action)
+    error_message = "Key Vault network ACL default action must be Allow or Deny."
+  }
+}
+
+variable "key_vault_network_acls_bypass" {
+  type        = string
+  description = "Traffic bypass setting for dev Key Vault network ACLs"
+  default     = "AzureServices"
+
+  validation {
+    condition     = contains(["AzureServices", "None"], var.key_vault_network_acls_bypass)
+    error_message = "Key Vault network ACL bypass must be AzureServices or None."
+  }
+}
+
+variable "key_vault_secrets" {
+  type = map(object({
+    value           = string
+    content_type    = optional(string)
+    expiration_date = optional(string)
+    not_before_date = optional(string)
+    tags            = optional(map(string), {})
+  }))
+  description = "Secrets to create in dev Key Vault"
+  default     = {}
+  sensitive   = true
+}

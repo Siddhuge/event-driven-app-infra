@@ -38,14 +38,18 @@ module "acr" {
 }
 
 module "kv" {
-  source      = "../../modules/keyvault"
-  name        = "${local.naming_prefix}-kv"
-  rg_name     = module.rg.name
-  location    = var.location
-  tags        = local.common_tags
-  environment = var.environment
-  tenant_id   = data.azurerm_client_config.current.tenant_id
-  object_id   = data.azurerm_client_config.current.object_id
+  source                        = "../../modules/keyvault"
+  name                          = "${local.naming_prefix}-kv"
+  rg_name                       = module.rg.name
+  location                      = var.location
+  tags                          = local.common_tags
+  environment                   = var.environment
+  tenant_id                     = data.azurerm_client_config.current.tenant_id
+  object_id                     = data.azurerm_client_config.current.object_id
+  public_network_access_enabled = var.key_vault_public_network_access_enabled
+  network_acls_default_action   = var.key_vault_network_acls_default_action
+  network_acls_bypass           = var.key_vault_network_acls_bypass
+  secrets                       = var.key_vault_secrets
 }
 
 module "aks" {

@@ -17,6 +17,21 @@ jumpbox_admin_username       = "azureuser"
 jumpbox_admin_ssh_public_key = "ssh-rsa REPLACE_WITH_YOUR_PUBLIC_KEY"
 jumpbox_allowed_ssh_cidrs    = ["REPLACE_WITH_YOUR_PUBLIC_IP/32"]
 
+# Optional launch-time secrets to create in Key Vault.
+# Keep real values in local terraform.tfvars, TF_VAR_key_vault_secrets, or Azure DevOps secret variables.
+key_vault_public_network_access_enabled = true
+key_vault_network_acls_default_action   = "Allow"
+key_vault_secrets = {
+  jumpbox-ssh-public-key = {
+    value        = "ssh-rsa REPLACE_WITH_YOUR_PUBLIC_KEY"
+    content_type = "text/plain"
+  }
+  jumpbox-allowed-ssh-cidr = {
+    value        = "REPLACE_WITH_YOUR_PUBLIC_IP/32"
+    content_type = "text/plain"
+  }
+}
+
 tags = {
   "Managed-By"  = "Terraform"
   "Cost-Center" = "Engineering"

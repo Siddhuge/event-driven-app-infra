@@ -12,6 +12,13 @@ aks_authorized_ips = [
   # "198.51.100.0/25"   # Example: VPN gateway IP
 ]
 
+# Optional launch-time secrets to create in Key Vault.
+# For hosted pipeline agents, public network access may need to be temporarily enabled
+# or the pipeline must run from a self-hosted agent with private Key Vault access.
+key_vault_public_network_access_enabled = false
+key_vault_network_acls_default_action   = "Deny"
+key_vault_secrets                       = {}
+
 tags = {
   "Managed-By"   = "Terraform"
   "Cost-Center"  = "Engineering"
