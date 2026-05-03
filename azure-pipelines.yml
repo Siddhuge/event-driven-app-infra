@@ -16,6 +16,7 @@ variables:
   # Environment-specific variables
   jumpboxEnabledDev: 'true'
   jumpboxEnabledProd: 'false'
+  keyVaultNameDev: 'event-driven-dev-kv'
   jumpboxSshPublicKeyDev: ''
   jumpboxAllowedSshCidrDev: ''
   jumpboxSshPublicKeyProd: ''
@@ -68,6 +69,15 @@ stages:
               terraform version
             displayName: Install Terraform
 
+          - task: AzureKeyVault@2
+            displayName: 🔑 Fetch Secrets from Key Vault (DEV)
+            continueOnError: true
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              KeyVaultName: $(keyVaultNameDev)
+              SecretsFilter: 'jumpbox-ssh-public-key,jumpbox-allowed-ssh-cidr'
+              RunAsPreJob: false
+
           - task: AzureCLI@2
             displayName: 📊 Terraform Plan + Drift Detection (DEV)
             inputs:
@@ -89,36 +99,11 @@ stages:
                 export ARM_USE_OIDC=true
                 export ARM_OIDC_TOKEN="${idToken}"
 
-                if [ "$(jumpboxEnabledDev)" = "true" ] && { [ -z "$(jumpboxSshPublicKeyDev)" ] || [ -z "$(jumpboxAllowedSshCidrDev)" ]; }; then
-                  echo "jumpboxSshPublicKeyDev and jumpboxAllowedSshCidrDev are required when jumpboxEnabledDev is true."
-                  exit 1
-                fi
-
                 cat > "$TF_DIR/pipeline.auto.tfvars" <<EOF
-                # Jumpbox configuration from Azure DevOps variables.
-                jumpbox_enabled              = $(jumpboxEnabledDev)
-                jumpbox_admin_username       = "azureuser"
-                jumpbox_admin_ssh_public_key = "$(jumpboxSshPublicKeyDev)"
-                jumpbox_allowed_ssh_cidrs    = ["$(jumpboxAllowedSshCidrDev)"]
+                jumpbox_enabled = $(jumpboxEnabledDev)
                 EOF
 
-                if [ -n "$(jumpboxSshPublicKeyDev)" ] && [ -n "$(jumpboxAllowedSshCidrDev)" ]; then
-                  cat >> "$TF_DIR/pipeline.auto.tfvars" <<EOF
-                # Secrets created by Terraform in the environment Key Vault.
-                key_vault_secrets = {
-                  jumpbox-ssh-public-key = {
-                    value        = "$(jumpboxSshPublicKeyDev)"
-                    content_type = "text/plain"
-                  }
-                  jumpbox-allowed-ssh-cidr = {
-                    value        = "$(jumpboxAllowedSshCidrDev)"
-                    content_type = "text/plain"
-                  }
-                }
-                EOF
-                fi
-
-                echo "✅ Generated pipeline.auto.tfvars"
+                echo "✅ Generated pipeline.auto.tfvars (SSH key and KV secrets sourced from terraform.tfvars)"
 
                 terraform -chdir="$TF_DIR" init -input=false
 
