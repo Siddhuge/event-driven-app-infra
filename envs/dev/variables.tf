@@ -90,7 +90,7 @@ variable "jumpbox_admin_username" {
 variable "jumpbox_admin_ssh_public_key" {
   type        = string
   description = "SSH public key allowed to log in to the jumpbox"
-  default     = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCu3abmLfz289m8GAmK2n1Fl747gG6e1+CRgxWOVkevA5ihS8s4OAtyOomAdAcIvuRGNTTYZd0oyiCplausE4cCftZh3POcMGTkoT/BWRnsmpyrB19kzE1CoSwnBiVmxDpsj0gCFw5uL3HwDVRRlAABRZV9ooFsOx11x8ObCtg3DFKGxA70BZjYjlgqvdQKv59HgsQ/vIjZfA7goRg53iv443/YCdzyduvOkCJr7DJCELVsR4Go6ff6FRxHaQG6IGly58+DB6I/DkZGHHmqZONvj9NlGlDlUUW9kgHeFRG5qCs7G3bR+V69CEQ7uiZyroF6dBpTndNQ/XQErxfHvtwr.ssh"
+  default     = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCu3abmLfz289m8GAmK2n1Fl747gG6e1+CRgxWOVkevA5ihS8s4OAtyOomAdAcIvuRGNTTYZd0oyiCplausE4cCftZh3POcMGTkoT/BWRnsmpyrB19kzE1CoSwnBiVmxDpsj0gCFw5uL3HwDVRRlAABRZV9ooFsOx11x8ObCtg3DFKGxA70BZjYjlgqvdQKv59HgsQ/vIjZfA7goRg53iv443/YCdzyduvOkCJr7DJCELVsR4Go6ff6FRxHaQG6IGly58+DB6I/DkZGHHmqZONvj9NlGlDlUUW9kgHeFRG5qCs7G3bR+V69CEQ7uiZyroF6dBpTndNQ/XQErxfHvtwr"
   validation {
     condition     = var.jumpbox_admin_ssh_public_key == "" || can(regex("^ssh-rsa ", var.jumpbox_admin_ssh_public_key))
     error_message = "jumpbox_admin_ssh_public_key must start with ssh-rsa."
@@ -100,7 +100,7 @@ variable "jumpbox_admin_ssh_public_key" {
 variable "jumpbox_allowed_ssh_cidrs" {
   type        = list(string)
   description = "CIDR ranges allowed to SSH to the jumpbox"
-  default     = []
+  default     = ["106.213.87.215/32"]
 
   validation {
     condition     = alltrue([for cidr in var.jumpbox_allowed_ssh_cidrs : can(cidrhost(cidr, 0))])
