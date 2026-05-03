@@ -69,14 +69,22 @@ stages:
               terraform version
             displayName: Install Terraform
 
-          - task: AzureKeyVault@2
+          - task: AzureCLI@2
             displayName: 🔑 Fetch Secrets from Key Vault (DEV)
-            continueOnError: true
             inputs:
               azureSubscription: $(azureServiceConnection)
-              KeyVaultName: $(keyVaultNameDev)
-              SecretsFilter: 'jumpbox-ssh-public-key,jumpbox-allowed-ssh-cidr'
-              RunAsPreJob: false
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                if az keyvault show --name $(keyVaultNameDev) --query name -o tsv 2>/dev/null; then
+                  SSH_KEY=$(az keyvault secret show --vault-name $(keyVaultNameDev) --name jumpbox-ssh-public-key --query value -o tsv 2>/dev/null || true)
+                  CIDR=$(az keyvault secret show --vault-name $(keyVaultNameDev) --name jumpbox-allowed-ssh-cidr --query value -o tsv 2>/dev/null || true)
+                  echo "##vso[task.setvariable variable=jumpbox-ssh-public-key;issecret=true]$SSH_KEY"
+                  echo "##vso[task.setvariable variable=jumpbox-allowed-ssh-cidr]$CIDR"
+                  echo "✅ Secrets fetched from Key Vault"
+                else
+                  echo "⚠️ Key Vault $(keyVaultNameDev) not found — will be created on first apply"
+                fi
 
           - task: AzureCLI@2
             displayName: 📊 Terraform Plan + Drift Detection (DEV)
